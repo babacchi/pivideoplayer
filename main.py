@@ -1,5 +1,5 @@
 import sys
-from PyQt6.QtWidgets import QApplication, QMainWindow, QPushButton, QGridLayout, QWidget, QFileDialog, QHBoxLayout, QVBoxLayout, QSlider, QStyle, QComboBox, QLabel, QMenuBar, QMenu, QSizePolicy
+from PyQt6.QtWidgets import QApplication, QMainWindow, QPushButton, QGridLayout, QWidget, QFileDialog, QHBoxLayout, QVBoxLayout, QSlider, QStyle, QComboBox, QLabel, QMenuBar, QMenu, QSizePolicy, QCheckBox
 from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput, QMediaDevices
 from PyQt6.QtMultimediaWidgets import QVideoWidget
 from PyQt6.QtCore import Qt, QUrl
@@ -87,6 +87,7 @@ class VideoPlayer(QMainWindow):
 
         self.video_paths = {}
         self.play_buttons = [] # Store references to play buttons
+        self.loop_checkboxes = [] # Store references to loop checkboxes
         self.current_playing_button_index = -1 # Track currently playing button
         self.create_buttons()
 
@@ -136,18 +137,26 @@ class VideoPlayer(QMainWindow):
 
     def create_buttons(self):
         for i in range(9):
+            row = i // 3
+            base_col = (i % 3) * 3  # 各スロットに3列使う
+
             play_button = QPushButton(f"Load Video {i + 1}")
             play_button.clicked.connect(lambda checked, idx=i: self.play_video_from_button(idx))
-            play_button.setEnabled(False) # 初期状態で無効化
-            self.grid_layout.addWidget(play_button, i // 3, (i % 3) * 2)
-            self.play_buttons.append(play_button) # Add button to list
+            play_button.setEnabled(False)
+            self.grid_layout.addWidget(play_button, row, base_col)
+            self.play_buttons.append(play_button)
 
             load_button = QPushButton("...")
             load_button.setFixedWidth(30)
             load_button.clicked.connect(lambda checked, b=play_button, idx=i: self.load_video(b, idx))
-            self.grid_layout.addWidget(load_button, i // 3, (i % 3) * 2 + 1)
+            self.grid_layout.addWidget(load_button, row, base_col + 1)
 
-            self.video_paths[i] = None # Initialize with no video loaded
+            loop_checkbox = QCheckBox("ループ")
+            loop_checkbox.toggled.connect(lambda checked, idx=i: self.toggle_video_loop_setting(idx, checked))
+            self.grid_layout.addWidget(loop_checkbox, row, base_col + 2)
+            self.loop_checkboxes.append(loop_checkbox)
+
+            self.video_paths[i] = {'path': None, 'loop': False}
 
     def closeEvent(self, event: QCloseEvent):
         if self.player_window and self.player_window.isVisible():
@@ -183,7 +192,7 @@ class VideoPlayer(QMainWindow):
     def load_video(self, button, index):
         file_path, _ = QFileDialog.getOpenFileName(self, "Open Video", "", "Video Files (*.mp4 *.avi *.mkv)")
         if file_path:
-            self.video_paths[index] = file_path
+            self.video_paths[index]['path'] = file_path
             filename = file_path.split('/')[-1]
             button.setToolTip(filename)
             max_len = 25
@@ -199,7 +208,7 @@ class VideoPlayer(QMainWindow):
                 self.switch_screen()
 
     def play_video_from_button(self, index):
-        file_path = self.video_paths.get(index)
+        file_path = self.video_paths.get(index, {}).get('path')
         if file_path:
             # Reset previous button color
             if self.current_playing_button_index != -1 and self.current_playing_button_index < len(self.play_buttons):
@@ -213,7 +222,9 @@ class VideoPlayer(QMainWindow):
                 self.show_player_window()
             else:
                 self.switch_screen()
-            
+            loop_enabled = self.video_paths.get(index, {}).get('loop', False)
+            self.media_player.setLoops(QMediaPlayer.Loops.Infinite if loop_enabled else 1)
+
             self.media_player.setSource(QUrl.fromLocalFile(file_path))
             self.media_player.play()
             self.current_playing_file_name = file_path.split('/')[-1]
@@ -279,6 +290,14 @@ class VideoPlayer(QMainWindow):
 
     def media_player_error(self, error):
         print(f"Error: {self.media_player.errorString()}")
+
+    def toggle_video_loop_setting(self, index, state):
+        if self.video_paths.get(index):
+            # state は bool（True か False）
+            self.video_paths[index]['loop'] = state
+
+            if index == self.current_playing_button_index:
+                self.media_player.setLoops(QMediaPlayer.Loops.Infinite if state else 1)
 
 
 if __name__ == "__main__":
