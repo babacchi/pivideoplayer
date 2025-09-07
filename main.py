@@ -179,11 +179,38 @@ class VideoPlayer(QMainWindow):
         if self.player_window:
             screen_index = self.screen_selector.currentIndex()
             screen = self.screens[screen_index] if 0 <= screen_index < len(self.screens) else QApplication.primaryScreen()
-            
+
             if self.player_window.screen() != screen:
-                self.player_window.showNormal()
+                # Preserve state
+                current_source = self.media_player.source()
+                current_position = self.media_player.position()
+                is_playing = self.media_player.playbackState() == QMediaPlayer.PlaybackState.PlayingState
+                is_looping = self.media_player.loops() == QMediaPlayer.Loops.Infinite
+
+                # Disconnect from old window and destroy it
+                self.media_player.setVideoOutput(None)
+                try:
+                    self.player_window.destroyed.disconnect(self.player_window_closed)
+                except TypeError:
+                    # This can happen if the connection was already broken
+                    pass
+                self.player_window.close()
+                self.player_window.deleteLater()
+                
+                # Create new window
+                self.player_window = PlayerWindow()
+                self.player_window.destroyed.connect(self.player_window_closed)
+                self.media_player.setVideoOutput(self.player_window.video_widget)
                 self.player_window.setGeometry(screen.geometry())
                 self.player_window.showFullScreen()
+
+                # Restore state
+                if current_source.isValid():
+                    self.media_player.setSource(current_source)
+                    self.media_player.setLoops(QMediaPlayer.Loops.Infinite if is_looping else 1)
+                    self.media_player.setPosition(current_position)
+                    if is_playing:
+                        self.media_player.play()
 
     def switch_audio_device(self, index):
         if 0 <= index < len(self.audio_devices):
