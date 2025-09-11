@@ -4,9 +4,10 @@ from PyQt6.QtWidgets import (QApplication, QMainWindow, QPushButton, QGridLayout
                              QFileDialog, QHBoxLayout, QVBoxLayout, QSlider, QStyle, \
                              QComboBox, QLabel, QMenuBar, QMenu, QSizePolicy, QCheckBox)
 from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput, QMediaDevices
-from PyQt6.QtCore import Qt, QUrl
+from PyQt6.QtCore import Qt, QUrl, QTimer
 from PyQt6.QtGui import QKeyEvent, QCloseEvent
 from player_window import PlayerWindow
+from objclib import hide_menubar_and_dock
 
 # メインのビデオプレーヤーコントローラークラス
 class VideoPlayer(QMainWindow):
@@ -15,10 +16,6 @@ class VideoPlayer(QMainWindow):
         super().__init__()
         self.setWindowTitle("Video Player Controller")  # ウィンドウのタイトルを設定
         self.setGeometry(100, 100, 1000, 500)  # ウィンドウの位置とサイズを設定
-
-        # メニューバーを作成
-        self.create_menu()
-        
         # 中央のウィジェットとメインレイアウトを設定
         self.central_widget = QWidget()
         self.setCentralWidget(self.central_widget)
@@ -80,11 +77,8 @@ class VideoPlayer(QMainWindow):
         audio_selector_layout.addWidget(self.audio_selector)
         settings_layout.addLayout(audio_selector_layout)
         
-        
-
         self.main_layout.addLayout(settings_layout)
         # --- 設定用のUI要素ここまで ---
-
 
         # 変数の初期化
         self.video_paths = {}  # ビデオファイルのパスを格納する辞書
@@ -110,20 +104,21 @@ class VideoPlayer(QMainWindow):
         self.media_player.positionChanged.connect(self.position_changed)
         self.media_player.durationChanged.connect(self.duration_changed)
         self.media_player.playbackStateChanged.connect(self.update_play_pause_icon)
-
-        # プレイヤーウィンドウを表示
-        self.show_player_window()
-
+        
         # デフォルトのフォントサイズと最前面表示を設定
         self.set_font_size("medium")
         self.font_size = "medium"
         self.controller_visible = True
+        
+        # コントローラーを常に最前面に表示
         self.setWindowFlags(self.windowFlags() | Qt.WindowType.WindowStaysOnTopHint)
         
-        # アプリ起動時にコントローラーの表示状態をメニューバーに反映
+        # メニューバーを作成
+        self.create_menu()
+        self.switch_screen()
+        # アプリ起動時にコントローラーの表示状態をメニューバーに反映 
         self.toggle_controller_visibility(self.controller_visible)
-        
-
+        self.showPlayerWindow()
     # メニューバーを作成するメソッド
     def create_menu(self):
         menubar = self.menuBar()
@@ -148,7 +143,6 @@ class VideoPlayer(QMainWindow):
         self.hide_controller_action = view_menu.addAction("コントローラーを隠す")
         self.hide_controller_action.triggered.connect(lambda: self.toggle_controller_visibility())
     
-
     # 設定をJSONファイルにエクスポートするメソッド
     def export_settings(self):
         # video_pathsのキーが数値だとJSONで問題になる可能性があるため文字列に変換
@@ -194,14 +188,12 @@ class VideoPlayer(QMainWindow):
                 audio_index = 0 # 範囲外ならデフォルトにリセット
             self.audio_selector.setCurrentIndex(audio_index)
 
-            
-
             # フォントサイズの適用
             self.set_font_size(settings.get('font_size', 'medium'))
 
             # コントローラーの表示状態を復元
-            controller_visible = settings.get('controller_visible', True)
-            self.toggle_controller_visibility(controller_visible)
+            self.controller_visible = settings.get('controller_visible', True)
+            self.showPlayerWindow()
 
             # UIを読み込んだ設定に合わせて更新
             self.update_ui_from_settings()
@@ -232,18 +224,23 @@ class VideoPlayer(QMainWindow):
                 button.setEnabled(False)
                 self.loop_checkboxes[i].setChecked(False)
 
+    def showPlayerWindow(self):
+        self.setVisible(self.controller_visible)
+        if self.controller_visible:
+            self.raise_()
+            self.activateWindow()
+
     def toggle_controller_visibility(self, visible=None):
         if visible is None:
             self.controller_visible = not self.controller_visible
         else:
             self.controller_visible = visible
-
-        self.setVisible(self.controller_visible)
-
+        
         if self.controller_visible:
             self.hide_controller_action.setText("コントローラーを隠す(C)")
         else:
             self.hide_controller_action.setText("コントローラーを表示(C)")
+        self.showPlayerWindow()
 
     # アプリケーション全体のフォントサイズを設定するメソッド
     def set_font_size(self, size):
@@ -317,56 +314,45 @@ class VideoPlayer(QMainWindow):
 
     # プレイヤーウィンドウを作成して表示する内部メソッド
     def _create_player_window(self, screen):
-        # プレイヤーウィンドウのインスタンスを作成（コントローラーを渡す）
         self.player_window = PlayerWindow(self)
         self.player_window.destroyed.connect(self.player_window_closed)
         self.media_player.setVideoOutput(self.player_window.video_widget)
-        
-        # 選択されたスクリーンでフルスクリーン表示
-        self.player_window.setGeometry(screen.geometry())
-        self.player_window.showFullScreen()
 
-    # プレイヤーウィンドウを表示するメソッド
-    def show_player_window(self):
-        if self.player_window is None:
-            screen_index = self.screen_selector.currentIndex()
-            screen = self.screens[screen_index] if 0 <= screen_index < len(self.screens) else QApplication.primaryScreen()
-            self._create_player_window(screen)
+        # 黒背景
+        self.player_window.setStyleSheet("background-color: black;")
+
+        # 擬似フルスクリーン（Spacesに移動しない）
+        self.player_window.setWindowFlags(
+            Qt.WindowType.FramelessWindowHint |
+            Qt.WindowType.WindowStaysOnTopHint
+        )
+        self.player_window.setGeometry(screen.geometry())
+        self.player_window.show()
+        self.player_window.raise_()
+        self.player_window.activateWindow()
+
+        # macOS の Dock とメニューバーを隠す
+        try:
+            hide_menubar_and_dock()
+        except Exception as e:
+            print("Failed to hide menu bar:", e)
 
     # 出力スクリーンを切り替えるメソッド
     def switch_screen(self):
-        if self.player_window:
-            screen_index = self.screen_selector.currentIndex()
-            screen = self.screens[screen_index] if 0 <= screen_index < len(self.screens) else QApplication.primaryScreen()
+        screen_index = self.screen_selector.currentIndex()
+        screen = self.screens[screen_index] if 0 <= screen_index < len(self.screens) else QApplication.primaryScreen()
 
-            # 現在のスクリーンと選択されたスクリーンが違う場合のみ処理
-            if self.player_window.screen() != screen:
-                # 再生状態を保持
-                current_source = self.media_player.source()
-                current_position = self.media_player.position()
-                is_playing = self.media_player.playbackState() == QMediaPlayer.PlaybackState.PlayingState
-                is_looping = self.media_player.loops() == QMediaPlayer.Loops.Infinite
-
-                # 古いウィンドウを破棄
-                self.media_player.setVideoOutput(None)
-                try:
-                    self.player_window.destroyed.disconnect(self.player_window_closed)
-                except TypeError:
-                    pass # 接続が既に切れている場合のエラーを無視
-                self.player_window.close()
-                self.player_window.deleteLater()
-                
-                # 新しいウィンドウを作成
-                self._create_player_window(screen)
-
-                # 保持した再生状態を復元
-                if current_source.isValid():
-                    self.media_player.setSource(current_source)
-                    self.media_player.setLoops(QMediaPlayer.Loops.Infinite if is_looping else 1)
-                    self.media_player.setPosition(current_position)
-                    if is_playing:
-                        self.media_player.play()
-
+        if self.player_window is None:
+            # 初めてのときだけ作る
+            self._create_player_window(screen)
+        else:
+            # 位置だけ移動する
+            self.player_window.setGeometry(screen.geometry())
+            self.player_window.show()
+            self.player_window.raise_()
+            self.player_window.activateWindow()
+            
+        self.showPlayerWindow()
     # 音声出力デバイスを切り替えるメソッド
     def switch_audio_device(self, index):
         if 0 <= index < len(self.audio_devices):
@@ -379,7 +365,7 @@ class VideoPlayer(QMainWindow):
             self.video_paths[index]['path'] = file_path
             filename = file_path.split('/')[-1]
             button.setToolTip(filename)
-            # ファイル名が長すぎる場合は省略して表示
+            # ファイル名が長すぎる場合は省略
             max_len = 25
             if len(filename) > max_len:
                 display_name = filename[:max_len-3] + "..."
