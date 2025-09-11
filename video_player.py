@@ -115,10 +115,9 @@ class VideoPlayer(QMainWindow):
         
         # メニューバーを作成
         self.create_menu()
-        self.switch_screen()
+        self._create_player_window(QApplication.primaryScreen())
         # アプリ起動時にコントローラーの表示状態をメニューバーに反映 
         self.toggle_controller_visibility(self.controller_visible)
-        self.showPlayerWindow()
     # メニューバーを作成するメソッド
     def create_menu(self):
         menubar = self.menuBar()
@@ -320,7 +319,7 @@ class VideoPlayer(QMainWindow):
 
         # 黒背景
         self.player_window.setStyleSheet("background-color: black;")
-
+        
         # 擬似フルスクリーン（Spacesに移動しない）
         self.player_window.setWindowFlags(
             Qt.WindowType.FramelessWindowHint |
@@ -330,29 +329,28 @@ class VideoPlayer(QMainWindow):
         self.player_window.show()
         self.player_window.raise_()
         self.player_window.activateWindow()
-
-        # macOS の Dock とメニューバーを隠す
-        try:
-            hide_menubar_and_dock()
-        except Exception as e:
-            print("Failed to hide menu bar:", e)
+        
+        if sys.platform == 'darwin':
+            # macOS の Dock とメニューバーを隠す
+            try:
+                hide_menubar_and_dock()
+            except Exception as e:
+                print("Failed to hide menu bar:", e)
+        elif sys.platform == 'win32':
+            # Windows ではフルスクリーンモードにする
+            self.player_window.showFullScreen()
+        
 
     # 出力スクリーンを切り替えるメソッド
     def switch_screen(self):
         screen_index = self.screen_selector.currentIndex()
         screen = self.screens[screen_index] if 0 <= screen_index < len(self.screens) else QApplication.primaryScreen()
-
-        if self.player_window is None:
-            # 初めてのときだけ作る
-            self._create_player_window(screen)
-        else:
-            # 位置だけ移動する
-            self.player_window.setGeometry(screen.geometry())
-            self.player_window.show()
-            self.player_window.raise_()
-            self.player_window.activateWindow()
-            
+        self.player_window.setGeometry(screen.geometry())
+        self.player_window.show()
+        self.player_window.raise_()
+        self.player_window.activateWindow()
         self.showPlayerWindow()
+
     # 音声出力デバイスを切り替えるメソッド
     def switch_audio_device(self, index):
         if 0 <= index < len(self.audio_devices):
