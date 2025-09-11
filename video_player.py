@@ -7,7 +7,9 @@ from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput, QMediaDevices
 from PyQt6.QtCore import Qt, QUrl, QTimer
 from PyQt6.QtGui import QKeyEvent, QCloseEvent
 from player_window import PlayerWindow
-from objclib import hide_menubar_and_dock
+if sys.platform == 'darwin':
+    from objclib import hide_menubar_and_dock
+    
 
 # メインのビデオプレーヤーコントローラークラス
 class VideoPlayer(QMainWindow):
