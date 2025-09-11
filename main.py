@@ -1,4 +1,5 @@
 import sys
+import json
 from PyQt6.QtWidgets import QApplication, QMainWindow, QPushButton, QGridLayout, QWidget, QFileDialog, QHBoxLayout, QVBoxLayout, QSlider, QStyle, QComboBox, QLabel, QMenuBar, QMenu, QSizePolicy, QCheckBox
 from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput, QMediaDevices
 from PyQt6.QtMultimediaWidgets import QVideoWidget
@@ -109,9 +110,18 @@ class VideoPlayer(QMainWindow):
         self.show_player_window()
 
         self.set_font_size("medium") # Set default font size
+        self.font_size = "medium"
 
     def create_menu(self):
         menubar = self.menuBar()
+
+        # File Menu
+        file_menu = menubar.addMenu("ファイル")
+        export_action = file_menu.addAction("設定をエクスポート")
+        export_action.triggered.connect(self.export_settings)
+        import_action = file_menu.addAction("設定をインポート")
+        import_action.triggered.connect(self.import_settings)
+
         view_menu = menubar.addMenu("表示")
 
         small_font_action = view_menu.addAction("小")
@@ -123,7 +133,75 @@ class VideoPlayer(QMainWindow):
         large_font_action = view_menu.addAction("大")
         large_font_action.triggered.connect(lambda: self.set_font_size("large"))
 
+    def export_settings(self):
+        # video_pathsのキーが数値だとJSONで問題になる可能性があるため文字列に変換
+        video_paths_str_keys = {str(k): v for k, v in self.video_paths.items()}
+
+        settings = {
+            'video_paths': video_paths_str_keys,
+            'screen_index': self.screen_selector.currentIndex(),
+            'audio_index': self.audio_selector.currentIndex(),
+            'font_size': self.font_size,
+        }
+
+        save_path, _ = QFileDialog.getSaveFileName(self, "設定をエクスポート", "", "JSON Files (*.json)")
+        if save_path:
+            if not save_path.endswith('.json'):
+                save_path += '.json'
+            with open(save_path, 'w') as f:
+                json.dump(settings, f, indent=4)
+
+    def import_settings(self):
+        load_path, _ = QFileDialog.getOpenFileName(self, "設定をインポート", "", "JSON Files (*.json)")
+        if load_path:
+            with open(load_path, 'r') as f:
+                settings = json.load(f)
+
+            video_paths_str_keys = settings.get('video_paths', {})
+            # JSONのキー（文字列）を整数に変換してvideo_pathsを再構築
+            self.video_paths = {int(k): v for k, v in video_paths_str_keys.items()}
+
+            # Screen index validation
+            screen_index = settings.get('screen_index', 0)
+            if screen_index >= self.screen_selector.count():
+                screen_index = 0 # Reset to default if out of bounds
+            self.screen_selector.setCurrentIndex(screen_index)
+
+            # Audio index validation
+            audio_index = settings.get('audio_index', 0)
+            if audio_index >= self.audio_selector.count():
+                audio_index = 0 # Reset to default if out of bounds
+            self.audio_selector.setCurrentIndex(audio_index)
+
+            self.set_font_size(settings.get('font_size', 'medium'))
+
+            self.update_ui_from_settings()
+
+    def update_ui_from_settings(self):
+        for i in range(9):
+            video_info = self.video_paths.get(i)
+            if video_info and video_info.get('path'):
+                file_path = video_info['path']
+                filename = file_path.split('/')[-1]
+                button = self.play_buttons[i]
+                button.setToolTip(filename)
+                max_len = 25
+                if len(filename) > max_len:
+                    display_name = filename[:max_len-3] + "..."
+                else:
+                    display_name = filename
+                button.setText(display_name)
+                button.setEnabled(True)
+                self.loop_checkboxes[i].setChecked(video_info.get('loop', False))
+            else:
+                button = self.play_buttons[i]
+                button.setText(f"Load Video {i + 1}")
+                button.setToolTip("")
+                button.setEnabled(False)
+                self.loop_checkboxes[i].setChecked(False)
+
     def set_font_size(self, size):
+        self.font_size = size
         if size == "small":
             font_size = 10
         elif size == "medium":
