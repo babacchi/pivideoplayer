@@ -1,3 +1,4 @@
 .vscode
 build
-dist__pycache__/
+dist
+__pycache__
