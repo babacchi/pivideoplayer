@@ -118,6 +118,7 @@ class VideoPlayer(QMainWindow):
         self._create_player_window(QApplication.primaryScreen())
         # アプリ起動時にコントローラーの表示状態をメニューバーに反映 
         self.toggle_controller_visibility(self.controller_visible)
+        
     # メニューバーを作成するメソッド
     def create_menu(self):
         menubar = self.menuBar()
@@ -328,8 +329,7 @@ class VideoPlayer(QMainWindow):
         self.player_window.setGeometry(screen.geometry())
         self.player_window.show()
         self.player_window.raise_()
-        self.player_window.activateWindow()
-        
+
         if sys.platform == 'darwin':
             # macOS の Dock とメニューバーを隠す
             try:
