@@ -426,8 +426,11 @@ class VideoPlayer(QMainWindow):
 
     # プレイヤーウィンドウが閉じられたときの処理
     def player_window_closed(self):
-        if self.media_player and self.media_player.playbackState() != QMediaPlayer.PlaybackState.StoppedState:
-            self.media_player.stop()
+        try:
+            if self.media_player and self.media_player.playbackState() != QMediaPlayer.PlaybackState.StoppedState:
+                self.media_player.stop()
+        except RuntimeError:
+            pass
         self.player_window = None
         self.current_playing_file_name = "停止中"
         self.current_video_label.setText(self.current_playing_file_name)
