@@ -15,6 +15,8 @@ if sys.platform == 'darwin':
 class VideoPlayer(QMainWindow):
     video_loaded = pyqtSignal(int, str)
     playback_state_changed = pyqtSignal(int, bool)
+    position_updated = pyqtSignal(int, int, int)
+    global_playback_state_changed = pyqtSignal(QMediaPlayer.PlaybackState)
 
     # コンストラクタ
     def __init__(self):
@@ -25,7 +27,7 @@ class VideoPlayer(QMainWindow):
         self.central_widget = QWidget()
         self.setCentralWidget(self.central_widget)
         self.main_layout = QVBoxLayout(self.central_widget)
-
+        
         # 再生コントロール用のレイアウト
         self.controls_layout = QHBoxLayout()
         self.main_layout.addLayout(self.controls_layout)
@@ -243,7 +245,6 @@ class VideoPlayer(QMainWindow):
         self.setVisible(self.controller_visible)
         if self.controller_visible:
             self.raise_()
-            self.activateWindow()
 
     def toggle_controller_visibility(self, visible=None):
         if visible is None:
@@ -465,6 +466,8 @@ class VideoPlayer(QMainWindow):
         self.seek_slider.setValue(position)
         duration = self.media_player.duration()
         if duration > 0:
+            if self.current_playing_button_index != -1:
+                self.position_updated.emit(self.current_playing_button_index, position, duration)
             remaining = duration - position
             # 時間ラベルを更新 (再生時間 / 総時間 (-残り時間))
             self.time_label.setText(f"{self.format_time(position)} / {self.format_time(duration)}  (-{self.format_time(remaining)})")
@@ -485,6 +488,7 @@ class VideoPlayer(QMainWindow):
         else: # 停止状態
             self.play_pause_button.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_MediaPlay))
             self.current_video_label.setText("停止中")
+        self.global_playback_state_changed.emit(state)
 
     # ミリ秒を hh:mm:ss 形式の文字列にフォーマットするメソッド
     def format_time(self, ms):
