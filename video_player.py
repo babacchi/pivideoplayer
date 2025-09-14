@@ -1,10 +1,10 @@
 import sys
 import json
-from PyQt6.QtWidgets import (QApplication, QMainWindow, QPushButton, QGridLayout, QWidget, \
-                             QFileDialog, QHBoxLayout, QVBoxLayout, QSlider, QStyle, \
+from PyQt6.QtWidgets import (QApplication, QMainWindow, QPushButton, QGridLayout, QWidget, 
+                             QFileDialog, QHBoxLayout, QVBoxLayout, QSlider, QStyle, 
                              QComboBox, QLabel, QMenuBar, QMenu, QSizePolicy, QCheckBox)
 from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput, QMediaDevices
-from PyQt6.QtCore import Qt, QUrl, QTimer
+from PyQt6.QtCore import Qt, QUrl, QTimer, pyqtSignal
 from PyQt6.QtGui import QKeyEvent, QCloseEvent
 from player_window import PlayerWindow
 if sys.platform == 'darwin':
@@ -13,6 +13,9 @@ if sys.platform == 'darwin':
 
 # メインのビデオプレーヤーコントローラークラス
 class VideoPlayer(QMainWindow):
+    video_loaded = pyqtSignal(int, str)
+    playback_state_changed = pyqtSignal(int, bool)
+
     # コンストラクタ
     def __init__(self):
         super().__init__()
@@ -106,6 +109,7 @@ class VideoPlayer(QMainWindow):
         self.media_player.positionChanged.connect(self.position_changed)
         self.media_player.durationChanged.connect(self.duration_changed)
         self.media_player.playbackStateChanged.connect(self.update_play_pause_icon)
+        self.media_player.mediaStatusChanged.connect(self.media_status_changed)
         
         # デフォルトのフォントサイズと最前面表示を設定
         self.set_font_size("medium")
@@ -121,6 +125,14 @@ class VideoPlayer(QMainWindow):
         # アプリ起動時にコントローラーの表示状態をメニューバーに反映 
         self.toggle_controller_visibility(self.controller_visible)
         
+    def media_status_changed(self, status):
+        if status == QMediaPlayer.MediaStatus.EndOfMedia:
+            if self.current_playing_button_index != -1:
+                if self.media_player.loops() != QMediaPlayer.Loops.Infinite:
+                    self.playback_state_changed.emit(self.current_playing_button_index, False)
+                    self.play_buttons[self.current_playing_button_index].setStyleSheet("")
+                    self.current_playing_button_index = -1
+
     # メニューバーを作成するメソッド
     def create_menu(self):
         menubar = self.menuBar()
@@ -207,6 +219,7 @@ class VideoPlayer(QMainWindow):
             if video_info and video_info.get('path'):
                 file_path = video_info['path']
                 filename = file_path.split('/')[-1]
+                self.video_loaded.emit(i, filename)
                 button = self.play_buttons[i]
                 button.setToolTip(filename) # ボタンにマウスオーバーでフルパス表示
                 # ファイル名が長すぎる場合は省略
@@ -330,7 +343,6 @@ class VideoPlayer(QMainWindow):
         )
         self.player_window.setGeometry(screen.geometry())
         self.player_window.show()
-        self.player_window.raise_()
 
         if sys.platform == 'darwin':
             # macOS の Dock とメニューバーを隠す
@@ -349,7 +361,6 @@ class VideoPlayer(QMainWindow):
         screen = self.screens[screen_index] if 0 <= screen_index < len(self.screens) else QApplication.primaryScreen()
         self.player_window.setGeometry(screen.geometry())
         self.player_window.show()
-        self.player_window.raise_()
         self.player_window.activateWindow()
         self.showPlayerWindow()
 
@@ -364,6 +375,7 @@ class VideoPlayer(QMainWindow):
         if file_path:
             self.video_paths[index]['path'] = file_path
             filename = file_path.split('/')[-1]
+            self.video_loaded.emit(index, filename)
             button.setToolTip(filename)
             # ファイル名が長すぎる場合は省略
             max_len = 25
@@ -386,10 +398,12 @@ class VideoPlayer(QMainWindow):
             # 前に再生していたボタンの色をリセット
             if self.current_playing_button_index != -1 and self.current_playing_button_index < len(self.play_buttons):
                 self.play_buttons[self.current_playing_button_index].setStyleSheet("") # デフォルトに戻す
+                self.playback_state_changed.emit(self.current_playing_button_index, False)
             
             # 現在再生するボタンの色を赤に変更
             self.play_buttons[index].setStyleSheet("background-color: red;")
             self.current_playing_button_index = index
+            self.playback_state_changed.emit(index, True)
 
             # プレイヤーウィンドウがなければ表示、あればスクリーンを切り替え
             if self.player_window is None:
@@ -422,6 +436,7 @@ class VideoPlayer(QMainWindow):
         # ボタンの色をリセット
         if self.current_playing_button_index != -1 and self.current_playing_button_index < len(self.play_buttons):
             self.play_buttons[self.current_playing_button_index].setStyleSheet("") # デフォルトに戻す
+            self.playback_state_changed.emit(self.current_playing_button_index, False)
         self.current_playing_button_index = -1
 
     # プレイヤーウィンドウが閉じられたときの処理
@@ -437,6 +452,7 @@ class VideoPlayer(QMainWindow):
         # ボタンの色をリセット
         if self.current_playing_button_index != -1 and self.current_playing_button_index < len(self.play_buttons):
             self.play_buttons[self.current_playing_button_index].setStyleSheet("") # デフォルトに戻す
+            self.playback_state_changed.emit(self.current_playing_button_index, False)
         self.current_playing_button_index = -1
 
     # シークバーの位置を設定するメソッド
